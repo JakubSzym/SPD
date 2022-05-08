@@ -3,136 +3,183 @@
 #include <vector>
 #include <algorithm>
 
+#undef TEST
+
 using namespace std;
 
-struct Task
+struct NEHData
 {
-  vector<int> data;
-  int id;
-  int weight;
-
-  bool operator<(const Task &other)
-  {
-    return weight < other.weight;
-  }
-};
-
-void readData(vector<vector<Task>> &list)
-{
-  string header;
+  vector<int> values;
+  vector<int> ids;
   int machines;
   int tasks;
+};
+
+struct NEHResult
+{
+  vector<int> ids;
+  int time;
+};
+
+void readData(vector<NEHData> &list, vector<NEHResult> &results)
+{
+  string header;
   int units;
+  int id;
 
   fstream file;
-  file.open("Data.txt", ios::in);
+  file.open("data.txt", ios::in);
+
+  //
+  // Wczytanie danych
+  //
 
   for (int x = 0; x < 120; x++)
   {
-    file >> header >> tasks >> machines;
-
-    vector<Task> tmpVectorTask;
-    for (int i = 0; i < tasks; i++)
+    NEHData tmpData;
+    NEHResult tmpResult;
+    file >> header >> tmpData.tasks >> tmpData.machines;
+    for (int i = 0; i < tmpData.tasks * tmpData.machines; i++)
     {
-      Task tmpTask;
-      tmpTask.id = i;
-      for (int j = 0; j < machines; j++)
-      {
-        file >> units;
-        tmpTask.data.push_back(units);
-      }
-      tmpVectorTask.push_back(tmpTask);
+      file >> units;
+      tmpData.values.push_back(units);
     }
-    list.push_back(tmpVectorTask);
+    for (int i = 0; i < tmpData.tasks; i++)
+    {
+      tmpData.ids.push_back(i);
+    }
+    list.push_back(tmpData);
+
+    file >> header;
+    file >> tmpResult.time;
+    for (int i = 0; i < tmpData.tasks; i++)
+    {
+      file >> id;
+      tmpResult.ids.push_back(id);
+    }
+    results.push_back(tmpResult);
   }
 
   file.close();
 }
 
-int length(int number, vector<Task> &listOfTasks)
+int length(int number, NEHData &userdata)
 {
-  vector<int> values;
-  for (auto &task: listOfTasks)
+  vector<int> help;
+
+  //
+  // Wypełnienie zerami wektora pomocniczego
+  //
+
+  for (int i = 0; i <= userdata.machines; i++)
   {
-    for (auto &item: task.data)
+    help.push_back(0);
+  }
+  
+  //
+  // Obliczenie długości wykonywania zadań
+  //
+
+  for (int i = 0; i < number; i++)
+  {
+    for (int j = 1; j <= userdata.machines; j++)
     {
-      values.push_back(item);
+      help[j] = max(help[j], help[j-1]) + userdata.values[(j-1) + userdata.ids[i] * userdata.machines];
     }
   }
-  vector<int> tmp;
-  for (int m = 0; m <= listOfTasks[0].data.size(); m++)
-  {
-    tmp.push_back(0);
-  }
-  for (unsigned int i = 0; i < number; i++)
-  {
-    for (unsigned int j = 1; j <= listOfTasks[i].data.size(); j++)
-    {
-      tmp[j] = max(tmp[j], tmp[j-1]) + values[(j-1) * i*listOfTasks[i].data.size()];
-    }
-  }
-  return tmp[listOfTasks[0].data.size()];
+
+  return help[userdata.machines];
 }
 
-void weights(vector<Task> &listOfTasks)
+void sortByWeight(NEHData &userdata)
 {
-  for (auto &task: listOfTasks)
-  {
-    task.weight = 0;
-    for (auto &item: task.data)
-    {
-      task.weight += item;
-    }
-  }
+  vector<int> weights;
 
-  sort(listOfTasks.begin(), listOfTasks.end());
+  //
+  // Obliczenie wag
+  //
+
+  for (int i = 0; i < userdata.tasks; i++)
+  {
+    int tmp = 0;
+    for (int j = 0; j < userdata.machines; j++)
+    {
+      tmp += userdata.values[i * userdata.machines + j];
+    }
+    weights.push_back(tmp);
+  }
+  
+  //
+  // Sortowanie wg wag
+  //
+
+  for (int i = 0; i < userdata.tasks - 1; i++)
+  {
+    for (int j = 0; j < userdata.tasks - 1; j++)
+    {
+      if (weights[j] < weights[j+1])
+      {
+        swap(weights[j], weights[j+1]);
+        swap(userdata.ids[j], userdata.ids[j+1]);
+      }
+    } 
+  }
 }
 
-int runNEH(vector<Task> &listOfTasks)
+int runNEH(NEHData &userdata)
 {
-  weights(listOfTasks);
-  for (unsigned int i = 0; i < listOfTasks.size(); i++)
-  {
-    int bestPosition = -1;
-    int bestLength = INT32_MAX;
+  sortByWeight(userdata);
 
-    for (int position = i; position >= 0; position--)
+  for (int i = 0; i < userdata.tasks; i++)
+  {
+    int optimalPosition = -1;
+    int optimalLength   = INT32_MAX;
+
+    for (int pos = i; pos >= 0; pos--)
     {
-      int tmpLength = length(i+1, listOfTasks);
-      if (bestLength >= tmpLength)
+      int tmpLength = length(i+1, userdata);
+      if (optimalLength >= tmpLength)
       {
-        bestLength = tmpLength;
-        bestPosition = position;
+        optimalLength = tmpLength;
+        optimalPosition = pos;
       }
-      if (position != 0)
+
+      if (pos != 0)
       {
-        swap(listOfTasks[position], listOfTasks[position-1]);
+        swap(userdata.ids[pos], userdata.ids[pos-1]);
       }
     }
 
-    for (int j = 0; i < bestPosition; j++)
+    for (int j = 0; j < optimalPosition; j++)
     {
-      swap(listOfTasks[j], listOfTasks[j+1]);
+      swap(userdata.ids[j], userdata.ids[j+1]);
     }
   }
-  return length(listOfTasks.size(), listOfTasks);
+  return length(userdata.tasks, userdata);
 }
 
 int main()
 {
-  vector<vector<Task>> database;
-    
-  readData(database);
+  vector<NEHData> database;
+  vector<NEHResult> results;
+  int errors = 0;
+  readData(database, results);
 
-  int result = runNEH(database[50]);
-  cout << result << endl;
-  /*for (auto &task: database[50])
+  for (unsigned int i = 0; i < database.size(); i++)
   {
-    cout << task.id << ". ";
-    for (auto &item: task.data)
+    int result = runNEH(database[i]);
+    
+    #ifdef TEST
+    
+    cout << "Wynik: " << result;
+    cout << " Wzor: " << results[i].time << endl;
+    
+    #endif
+    
+    if (result != results[i].time)
     {
-      cout << item << " ";
+      errors++;
     }
-    cout << endl;
-  }*/
+  }
+  cout << "Liczba niezgodnosci: " << errors << endl;
 }
